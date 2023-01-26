@@ -25,11 +25,13 @@ def pd_np_mpl_import():
     global np
     global plt
     global reload
+    global sns
 
     pd = __import__('pandas', globals(), locals())
     np = __import__('numpy', globals(), locals())
     matplotlib = __import__('matplotlib', globals(), locals())
     plt = matplotlib.pyplot
+    sns = __import__('seaborn', globals(), locals())
     importlib = __import__('importlib', globals(), locals())
     reload = importlib.reload
 
@@ -209,8 +211,6 @@ def see(data, title=None, width="auto", fontsize=4,
         bgcolor=bgcolor, text_color=text_color,
         intraday=False):
 
-    pd.options.display.float_format = '{:,.2f}'.format
-
     if title != None:
         div_print(f"{title}", fontsize=fontsize, width=width,
                   bgcolor=bgcolor, text_color=text_color)
@@ -389,6 +389,128 @@ def fancy_plot(data, kind="line", title=None, legend_loc='upper right',
         plt.legend(labels=data.columns, fontsize=15, loc=legend_loc,
                    facecolor=outerbackcolor, labelcolor=fontcolor)
 
+
+# ************************************************************************** #
+# ****************************TIME SERIES ********************************** #
+
+
+# ****************************Featurize Datetime Index********************************** #
+def featurize_datetime_index(df, daytime=True):
+    '''
+    Create time series features based on a datetime index
+    '''
+
+    df = df.copy()
+
+    df['hour'] = df.index.hour
+    df['weekday'] = df.index.dayofweek
+    df['weekday_name'] = df.index.strftime('%A')
+    df['month'] = df.index.month
+    df['month_name'] = df.index.strftime('%B')
+    df['quarter'] = df.index.quarter
+    df['year'] = df.index.year
+    df['week_of_year'] = df.index.isocalendar().week
+    df['day_of_year'] = df.index.dayofyear
+
+    if daytime:
+        # Add column with category for time of day:
+        # midnight, early_morning, late_morning, afternoon, evening, night
+        def time_of_day(hour):
+            if hour >= 0 and hour < 6:
+                return 'midnight'
+            elif hour >= 6 and hour < 9:
+                return 'early_morning'
+            elif hour >= 9 and hour < 12:
+                return 'late_morning'
+            elif hour >= 12 and hour < 15:
+                return 'afternoon'
+            elif hour >= 15 and hour < 18:
+                return 'evening'
+            else:
+                return 'night'
+
+                df['time_of_day'] = (df['hour'].apply(time_of_day)).astype('category')
+
+        df['weekday_name'] = df['weekday_name'].astype('category')
+        df['month_name'] = df['month_name'].astype('category')
+        df['week_of_year'] = df.week_of_year.astype(float)
+
+    return df
+
+
+# ****************************Add Change Column ********************************** #
+
+def add_change_column(df, column_changing, new_col_name):
+	df['previous'] = df[column_changing].shift()
+	df = df.drop(df.index[0])
+	df[new_col_name] = df[column_changing] - df.previous
+	df = df.drop(columns = ['previous'])
+	return df
+
+
+# ****************************Add Year Lags ********************************** #
+def year_lags(df, target_column, lag_label_list):
+    target_map = df[target_column].to_dict()
+    inputs = lag_label_list.copy()
+
+    for tup in inputs:
+        df[tup[1]] = (df.index - pd.Timedelta(tup[0])).map(target_map)
+
+    return df
+
+# ****************************Add Accuracy********************************** #
+def get_accuracy(df, pred_col, actual_col):
+    from sklearn.metrics import mean_squared_error
+    df = df.copy()
+
+    df['abs_acc'] = (1 - (abs(df[actual_col] -
+                              df[pred_col]) / df[actual_col])) * 100
+
+    range_diff = np.max(df[actual_col]) - np.min(df[actual_col])
+
+    df['rel_acc'] = (1 - (abs(df[actual_col] -
+                              df[pred_col]) / range_diff)) * 100
+
+    range_std = np.std(df[actual_col])
+
+    df['sharpe'] = (abs(df[actual_col] -
+                        df[pred_col]) / range_std)
+
+    rmse = np.sqrt(mean_squared_error(df[actual_col],
+                                      df[pred_col]))
+
+    div_print(f"Average RMSE: {rmse:,.2f}  |  Average sharpe ratio: {df['sharpe'].mean():.2f} ", fontsize=3)
+    div_print(
+        f"Average absolute accuracy: {df['abs_acc'].mean():.2f}%  |  Average relative accuracy: {df['rel_acc'].mean():.2f}% ",
+        fontsize=3)
+
+    return df
+
+# **************************** BoxPlot Correlation ********************************** #
+def boxplot_correlation(df, feature_x, feature_y, order=None, palette=None):
+    fig, ax = plt.subplots(figsize=(13, 7), facecolor='#333333')
+    ax.set_facecolor('LightGray')
+
+    sns.boxplot(data=df,
+                x=feature_x,
+                y=feature_y,
+                order=order,
+                palette=palette)
+
+    x_name = str(df[feature_x].name)
+    y_name = str(df[feature_y].name)
+
+    ax.grid()
+    plt.xlabel(x_name, color='white', fontsize=15)
+    plt.ylabel(y_name, color='white', fontsize=15)
+    plt.xticks(color='white');
+    plt.yticks(color='white');
+    plt.title(f'Feature Correlation: {x_name.capitalize()} - {y_name.capitalize()}',
+              fontsize=20, pad=20, color='white');
+
+
+
+# ****************************IPYWIDGETS Functions********************************** #
 # ****************************MINI-PLOT********************************** #
 def mini_plot(df, title, ylabel=None, xlabel=None, cmap='cool', kind='line',
               label_rot=None, logy=False, legend_loc=2
@@ -416,7 +538,6 @@ def mini_plot(df, title, ylabel=None, xlabel=None, cmap='cool', kind='line',
         plt.legend(labels=df.columns, fontsize=15, loc=legend_loc,
                    facecolor=outerbackcolor, labelcolor=text_color)
     plt.show()
-
 
 # ****************************PLOT-BY-DF********************************** #
 
