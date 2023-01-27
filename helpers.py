@@ -393,6 +393,48 @@ def fancy_plot(data, kind="line", title=None, legend_loc='upper right',
 # ************************************************************************** #
 # ****************************TIME SERIES ********************************** #
 
+# ****************************TIME SERIES OVERVIEW********************************** #
+def timeseries_overview(df, metric_col):
+    index_col = ['total records', 'start date', 'end date', 'total columns',
+                 'column labels', 'total missing values', f'{metric_col} average',
+                 f'{metric_col} std', f'{metric_col} min', f'{metric_col} 25%',
+                 f'{metric_col} 50%', f'{metric_col} 75%', f'{metric_col} max', ]
+
+    num_records = df.shape[0]
+    num_cols = df.shape[1]
+    missing_values = df.isna().sum().sum()
+    columns = ', '.join(list(df.columns))
+    start_date = min(df.index).strftime('%m/%d/%Y')
+    end_date = max(df.index).strftime('%m/%d/%Y')
+    [metric_average, metric_std, metric_min, metric_25th,
+     metric_50th, metric_75th, metric_max] = df.describe().iloc[1:][metric_col]
+
+    values = [num_records, start_date, end_date, num_cols, columns,
+              missing_values, metric_average, metric_std,
+              metric_min, metric_25th, metric_50th, metric_75th, metric_max]
+
+    overview = pd.concat([pd.Series(index_col), pd.Series(values)], axis=1)
+    overview.columns = [' ', 'measurement']
+    overview.set_index(' ')
+
+    styling = {'measurement': [{'selector': '',
+                                'props': [('font-size', '15px'),
+                                          ('text-align', 'left'),
+                                          ('padding-right', '15px'),
+                                          ('padding-left', '55px')]}],
+               ' ': [{'selector': '',
+                      'props': [('font-weight', 'bold'),
+                                ('text-align', 'left'),
+                                ('font-size', '15px'),
+                                ('padding-right', '15px'),
+                                ('padding-left', '15px')]}]}
+
+    pretty(f'DataFrame Overview  |  Primary Metric: {metric_col}', fontsize=4)
+
+    return overview.style \
+        .hide(axis='index') \
+        .set_table_styles(styling) \
+        .format(precision=0, thousands=",")
 
 # ****************************Featurize Datetime Index********************************** #
 def featurize_datetime_index(df, daytime=True):
